@@ -1,0 +1,16 @@
+﻿##ignore this file##
+/x64/
+/.vs/
+.classpath
+.project
+.settings
+##*.props
+ ##filter databfile、sln file##
+##*.mdb
+##*.ldb
+##*.sln
+##class file##
+*.com
+*.class
+*.dll
+*.exe

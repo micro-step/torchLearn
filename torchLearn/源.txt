@@ -1,0 +1,15 @@
+		/*
+		1、Tensor.contiguous（）
+		：view只能用在contiguous的variable上。如果在view之前用了transpose, permute等，需要用contiguous()来返回一个contiguous copy。
+一种可能的解释是：
+有些tensor并不是占用一整块内存，而是由不同的数据块组成，而tensor的view()操作依赖于内存是整块的，这时只需要执行contiguous()这个函数，把tensor变成在内存中连续分布的形式。
+判断是否contiguous用torch.Tensor.is_contiguous()函数。
+	在pytorch的最新版本0.4版本中，增加了torch.reshape(), 这与 numpy.reshape 的功能类似。它大致相当于 tensor.contiguous().view()
+meshgrid用于从数组a和b产生网格。生成的网格矩阵A和B大小是相同的。它也可以是更高维的。
+
+2、torch::meshgrid(a,b)
+[A,B]=Meshgrid(a,b)
+生成size(b)Xsize(a)大小的矩阵A和B。它相当于a从一行重复增加到size(b)行，把b转置成一列再重复增加到size(a)列。因此命令等效于：
+A=ones(size(b))*a;
+B=b'*ones(size(a))
+3、	result.select(2, 0)//第2+1维上的 第index 列数据
