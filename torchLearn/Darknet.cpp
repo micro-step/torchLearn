@@ -200,7 +200,7 @@ struct DetectionLayer:torch::nn::Module
 		*/
 		result.select(2, 0).sigmoid_();//中心 tx 偏移量
 		result.select(2, 1).sigmoid_();//中心 ty 偏移量
-		result.select(2.4).sigmoid_();//目标分数 
+		result.select(2,4).sigmoid_();//目标分数 
 
 
 		auto grid_len = torch::arange(grid_size);
@@ -548,7 +548,7 @@ torch::Tensor Darknet::forward(torch::Tensor x){
 				torch::Tensor map_1 = outputs[i + start];
 				torch::Tensor map_2 = outputs[i + end];
 
-				x = torch.cat({ map_1, map_2 }, 1);
+				x = torch::cat({ map_1, map_2 }, 1);
 			}
 			outputs[i] = x;
 		}
@@ -586,22 +586,21 @@ torch::Tensor Darknet::forward(torch::Tensor x){
 	return result;
 }
 
-torch::Tensor Darknet::write_results(torch::Tensor prediction, int num_classes, float confidence, float nms_conf)
+torch::Tensor Darknet::write_results(torch::Tensor prediction, int num_classes, float confidence, float nms_conf /* = 0.4 */)
 {
-	// get result which object confidence > threshold筛选出有物体的结果 pick the result that has the object 
-	//conf_mask prediction.size(0) X prediction.size(2)
-	auto conf_mask = (prediction.select(2, 4) > confidence).to(torch::kFloat32).unsqueeze(2);
+	auto conf_maak = (prediction.select(2, 4) > confidence).to(torch::kFloat32).unsqueeze(2);
 
-	prediction.mul_(conf_mask);
+	prediction.mul_(conf_maak);
+
 	auto ind_nz = torch::nonzero(prediction.select(2, 4)).transpose(0, 1).contiguous();
 
-	if (ind_nz.size(0) == 0)
+	if (ind_nz.size(0)==0)
 	{
 		return torch::zeros({ 0 });
 	}
-
+	//prediction.options() tensor的数据格式级选项 TensorOptions(dtype=float, device=cpu, layout=Strided, requires_grad=false)
 	torch::Tensor box_a = torch::ones(prediction.sizes(), prediction.options());
-	// top left x = centerX - w/2
+	//top left x =ccenterX-w/2
 	box_a.select(2, 0) = prediction.select(2, 0) - prediction.select(2, 2).div(2);
 	box_a.select(2, 1) = prediction.select(2, 1) - prediction.select(2, 3).div(2);
 	box_a.select(2, 2) = prediction.select(2, 0) + prediction.select(2, 2).div(2);
@@ -612,62 +611,59 @@ torch::Tensor Darknet::write_results(torch::Tensor prediction, int num_classes, 
 	int batch_size = prediction.size(0);
 	int item_attr_size = 5;
 
-	torch::Tensor output = torch::ones({ 1, prediction.size(2) + 1 });
+	torch::Tensor output = torch::ones({ 1,prediction.size(2) + 1 });
+
 	bool write = false;
-
 	int num = 0;
-
-	for (int i = 0; i < batch_size; i++)
+	for (int i=0;i<batch_size;++i)
 	{
 		auto image_prediction = prediction[i];
-
-		// get the max classes score at each result max_classes[0] max and max_classes[1] index 
+		// get the max classes score at each result max_classes[0] max and max_classes[1] index 0是行1 是列
 		std::tuple<torch::Tensor, torch::Tensor> max_classes = torch::max(image_prediction.slice(1, item_attr_size, item_attr_size + num_classes), 1);
-
-		// class score
+		//score
 		auto max_conf = std::get<0>(max_classes);
-		// index
+		//index 行id 
+
 		auto max_conf_score = std::get<1>(max_classes);
 		max_conf = max_conf.to(torch::kFloat32).unsqueeze(1);
 		max_conf_score = max_conf_score.to(torch::kFloat32).unsqueeze(1);
-
 		// shape: n * 7, left x, left y, right x, right y, object confidence, class_score, class_id
 		image_prediction = torch::cat({ image_prediction.slice(1, 0, 5), max_conf, max_conf_score }, 1);
 
-		// remove item which object confidence == 0
+		//remove item which object confidence=0 返回不等于0的行id
 		auto non_zero_index = torch::nonzero(image_prediction.select(1, 4));
+		//根据行id 选出 生成的种类
 		auto image_prediction_data = image_prediction.index_select(0, non_zero_index.squeeze()).view({ -1, 7 });
 
-		// get unique classes 
-		std::vector<torch::Tensor> img_classes;
-
-		for (int m = 0, len = image_prediction_data.size(0); m < len; m++)
+		//get unique classes
+		std::vector<torch::Tensor> img_classes;//classesID
+		for (int m=0,len=image_prediction.size(0);m<len;++m)
 		{
 			bool found = false;
-			for (int n = 0; n < img_classes.size(); n++)
+			for (int n=0;n<img_classes.size();n++)
 			{
-				auto ret = (image_prediction_data[m][6] == img_classes[n]);
-				if (torch::nonzero(ret).size(0) > 0)
+				auto ret = (image_prediction[m][6] == img_classes[n]);
+				if (torch::nonzero(ret).size(0)>0)
 				{
 					found = true;
 					break;
 				}
 			}
-			if (!found) img_classes.push_back(image_prediction_data[m][6]);
+			if (!found) img_classes.push_back(image_prediction[m][6]);
 		}
-
 		for (int k = 0; k < img_classes.size(); k++)
 		{
-			auto cls = img_classes[k];
-
+			auto cls = img_classes[k]; //取出一类进行比较
+			//选出该类的所有预测
 			auto cls_mask = image_prediction_data * (image_prediction_data.select(1, 6) == cls).to(torch::kFloat32).unsqueeze(1);
+			//取出所有预测不等0 的结果的行号
 			auto class_mask_index = torch::nonzero(cls_mask.select(1, 5)).squeeze();
-
+			//取出所有符合结果的行
 			auto image_pred_class = image_prediction_data.index_select(0, class_mask_index).view({ -1, 7 });
-			// ascend by confidence
+			// ascend by confidence 升序排序
 			// seems that inverse method not work
 			std::tuple<torch::Tensor, torch::Tensor> sort_ret = torch::sort(image_pred_class.select(1, 4));
-
+			//取出排序的行ID
 			auto conf_sort_index = std::get<1>(sort_ret);
 
 			// seems that there is something wrong with inverse method
@@ -685,8 +681,9 @@ torch::Tensor Darknet::write_results(torch::Tensor prediction, int num_classes, 
 				}
 
 				auto ious = get_bbox_iou(image_pred_class[mi].unsqueeze(0), image_pred_class.slice(0, 0, mi));
-
+				//根据IOU筛选
 				auto iou_mask = (ious < nms_conf).to(torch::kFloat32).unsqueeze(1);
+
 				image_pred_class.slice(0, 0, mi) = image_pred_class.slice(0, 0, mi) * iou_mask;
 
 				// remove from list
@@ -711,10 +708,7 @@ torch::Tensor Darknet::write_results(torch::Tensor prediction, int num_classes, 
 		}
 	}
 
-	if (num == 0)
-	{
-		return torch::zeros({ 0 });
-	}
 
-	return output;
+	
+
 }

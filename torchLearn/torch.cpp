@@ -7,9 +7,9 @@
 #include <iostream>
 
 
-#define TEST_UNIT
+//#define TEST_UNIT
 //#define TEST_ANCHOR
-#define TEST_MODU
+//#define TEST_MODU
 // Define a new Module.
 struct Net : torch::nn::Module {
 	Net() {
@@ -40,6 +40,20 @@ int main(int argc, char* argv[]) {
 	std::cout << "in : \n" << in << std::endl;
 	std::cout << in.sizes() << std::endl;
 
+	torch::Tensor tensor = torch::randint(/*low=*/-1, /*high=*/3, { 10, 5 });
+	std::cout << tensor << std::endl;
+	std::cout << " tensor.options() " << std::endl;
+
+	std::cout << tensor.options() << std::endl;
+	auto index_s = tensor.slice(1, 2).squeeze();
+	std::tuple<torch::Tensor,torch::Tensor> indxs = torch::max(index_s, 1);
+	std::cout <<std::get<0>(indxs) << std::endl;
+	std::cout << std::get<1>(indxs) << std::endl;
+
+	std::cout << index_s << std::endl;
+	//auto index_s = torch::nonzero(tensor.select(1, 2));
+	//std::cout << tensor.index_select(0,index_s.squeeze()) << std::endl;
+
 #ifdef TEST_UNIT
 
 
@@ -50,8 +64,20 @@ int main(int argc, char* argv[]) {
 	std::cout << " ( " << std::get<0>(xx) << ", " << std::get<1>(xx) << ", " << std::get<2>(xx) << " )\n";
 
 	int fm_sizes[] = { 8, 16, 32, 64, 128 };
-	torch::Tensor tensor = torch::randint(/*low=*/3, /*high=*/10, { 5, 5 });
+	torch::Tensor tensor = torch::randint(/*low=*/-1, /*high=*/3, { 10, 5 });
 	std::cout << tensor << std::endl;
+	std::cout << " tensor.options() "<< std::endl;
+
+	std::cout << tensor.options() << std::endl;
+	auto index_s = tensor.slice(1, 2).squeeze();
+	std::vector<torch::Tensor> indxs = torch::max(index_s, 1);
+	std::cout << indxs[0] << std::endl;
+	std::cout << indxs[1] << std::endl;
+
+	std::cout << index_s << std::endl;
+	//auto index_s = torch::nonzero(tensor.select(1, 2));
+	//std::cout << tensor.index_select(0,index_s.squeeze()) << std::endl;
+	
 	torch::Tensor range_tensor = torch::range(1, 25) + c10::Scalar(0.5);
 	torch::Tensor cat_tensor = torch::cat(torch::TensorList({ range_tensor, range_tensor }), 0);
 
