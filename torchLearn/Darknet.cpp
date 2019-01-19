@@ -687,11 +687,11 @@ torch::Tensor Darknet::write_results(torch::Tensor prediction, int num_classes, 
 				//计算Iou 
 				auto ious = get_bbox_iou(image_pred_class[mi].unsqueeze(0), image_pred_class.slice(0, 0, mi));
 				//过滤掉小于阈值的IOUs
-				auto iou_mask = (ious<nms_conf).to(torch::kFloat32).unsqueeze();
+				auto iou_mask = (ious<nms_conf).to(torch::kFloat32).unsqueeze(1);
 				
 				image_pred_class.slice(0, 0, mi) = image_pred_class.slice(0, 0, mi)*iou_mask;
 
-				auto non_zero_index = torch::nonzero(image_pred_class.select((1, 4)).squeeze();
+				at::Tensor non_zero_index = torch::nonzero(image_pred_class.select(1, 4));
 				//选出该类别中符合的区域
 				image_pred_class = image_pred_class.index_select(0, non_zero_index).view({ -1, 7 });
 			}

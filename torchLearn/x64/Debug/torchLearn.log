@@ -1,4 +1,4 @@
-﻿  Darknet.cpp
+﻿  mainY.cpp
 e:\pyl\torch\include\c10\util\exception.h(27): warning C4275: 非 dll 接口 class“std::exception”用作 dll 接口 class“c10::Error”的基
   d:\program files (x86)\microsoft visual studio\preview\professional\vc\tools\msvc\14.11.25503\include\vcruntime_exception.h(43): note: 参见“std::exception”的声明
   e:\pyl\torch\include\c10\util\exception.h(27): note: 参见“c10::Error”的声明
@@ -774,21 +774,9 @@ e:\pyl\torch\include\torch\csrc\api\include\torch\optim\sgd.h(45): warning C4251
           [
               _Ty=at::Tensor
           ]
-e:\pyl\torchlearn\torchlearn\darknet.cpp(177): warning C4244: “初始化”: 从“int64_t”转换到“int”，可能丢失数据
-e:\pyl\torchlearn\torchlearn\darknet.cpp(178): warning C4244: “初始化”: 从“double”转换到“int”，可能丢失数据
-e:\pyl\torchlearn\torchlearn\darknet.cpp(179): warning C4244: “初始化”: 从“double”转换到“int”，可能丢失数据
-e:\pyl\torchlearn\torchlearn\darknet.cpp(181): warning C4267: “初始化”: 从“size_t”转换到“int”，可能丢失数据
-e:\pyl\torchlearn\torchlearn\darknet.cpp(276): warning C4267: “初始化”: 从“size_t”转换到“int”，可能丢失数据
-e:\pyl\torchlearn\torchlearn\darknet.cpp(374): warning C4244: “参数”: 从“int32_t”转换到“const float”，可能丢失数据
-e:\pyl\torchlearn\torchlearn\darknet.cpp(375): warning C4244: “参数”: 从“int32_t”转换到“const float”，可能丢失数据
-e:\pyl\torchlearn\torchlearn\darknet.cpp(332): warning C4101: “sz”: 未引用的局部变量
-e:\pyl\torchlearn\torchlearn\darknet.cpp(449): warning C4244: “初始化”: 从“int64_t”转换到“int”，可能丢失数据
-e:\pyl\torchlearn\torchlearn\darknet.cpp(475): warning C4244: “初始化”: 从“int64_t”转换到“int”，可能丢失数据
-e:\pyl\torchlearn\torchlearn\darknet.cpp(484): warning C4244: “初始化”: 从“int64_t”转换到“int”，可能丢失数据
-e:\pyl\torchlearn\torchlearn\darknet.cpp(498): warning C4267: “初始化”: 从“size_t”转换到“int”，可能丢失数据
-e:\pyl\torchlearn\torchlearn\darknet.cpp(598): warning C4244: “初始化”: 从“int64_t”转换到“int”，可能丢失数据
-e:\pyl\torchlearn\torchlearn\darknet.cpp(630): warning C4244: “初始化”: 从“int64_t”转换到“int”，可能丢失数据
-e:\pyl\torchlearn\torchlearn\darknet.cpp(666): warning C4244: “初始化”: 从“int64_t”转换到“int”，可能丢失数据
+e:\pyl\torchlearn\torchlearn\mainy.cpp(70): warning C4305: “参数”: 从“double”到“float”截断
+e:\pyl\torchlearn\torchlearn\mainy.cpp(78): warning C4244: “初始化”: 从“int64_t”转换到“int”，可能丢失数据
+e:\pyl\torchlearn\torchlearn\mainy.cpp(87): warning C4244: “参数”: 从“float”转换到“int”，可能丢失数据
 e:\pyl\torch\include\c10\util\optional.h(430): warning C4267: “参数”: 从“size_t”转换到“int”，可能丢失数据
   e:\pyl\torch\include\aten\core\function_schema.h(131): note: 参见对正在编译的函数 模板 实例化“c10::optional<int32_t>::optional<::size_t,false>(U &&)”的引用
           with
@@ -986,6 +974,5 @@ e:\pyl\torch\include\c10\half.h(366): warning C4244: “参数”: 从“double�
               To=c10::Half,
               From=double
           ]
-e:\pyl\torchlearn\torchlearn\darknet.cpp(400): warning C4715: “Darknet::get_net_info”: 不是所有的控件路径都返回值
     正在创建库 E:\PyL\torchLearn\x64\Debug\torchLearn.lib 和对象 E:\PyL\torchLearn\x64\Debug\torchLearn.exp
   torchLearn.vcxproj -> E:\PyL\torchLearn\x64\Debug\torchLearn.exe

@@ -6,7 +6,7 @@
 
 #include "Darknet.h"
 
-int main(int argc, const char* argv[])
+int mainY(int argc, const char* argv[])
 {
 	if (argc!=2)
 	{
@@ -56,12 +56,12 @@ int main(int argc, const char* argv[])
 	cv::Mat img_float;
 	resized_image.convertTo(img_float, CV_32F, 1.0 / 255);
 
-	auto img_tensor = torch::CPU(torch::kFloat32).tensorFromBlob(input_image_size.data, { 1, input_image_size, input_image_size, 3 });
+	auto img_tensor = torch::CPU(torch::kFloat32).tensorFromBlob(resized_image.data, { 1, input_image_size, input_image_size, 3 });
 	img_tensor = img_tensor.permute({ 0,3, 1, 2 });
 
-	auto img_var = torch::autograd::make_variable(img_tensor, false).to(device);
+	at::Tensor img_var = torch::autograd::make_variable(img_tensor).to(device);
 
-	auto output = net.forward(img_var);
+	at::Tensor output = net.forward(img_var);
 
 	//fillter result by NMS
 	//class_num =80
@@ -80,7 +80,7 @@ int main(int argc, const char* argv[])
 		float w_scale = float(origin_image.cols) / input_image_size;
 		float h_scale = float(origin_image.rows) / input_image_size;
 
-		auto reult_data = result.accessor<float, 2>();
+		auto result_data = result.accessor<float,2>();
 
 		for (int i = 0; i < result.size(0);i++)
 		{

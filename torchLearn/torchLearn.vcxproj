@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -131,8 +131,10 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Darknet.h" />
+    <ClInclude Include="gpu_nms.hpp" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="nms_kernel.cu" />
     <None Include="yolov3.cfg" />
   </ItemGroup>
   <ItemGroup>
