@@ -651,17 +651,20 @@ torch::Tensor Darknet::write_results(torch::Tensor prediction, int num_classes, 
 			}
 			if (!found) img_classes.push_back(image_prediction[m][6]);
 		}
+
 		for (int k = 0; k < img_classes.size(); k++)
 		{
 			auto cls = img_classes[k]; //取出一类进行比较
 			//选出该类的所有预测
 			auto cls_mask = image_prediction_data * (image_prediction_data.select(1, 6) == cls).to(torch::kFloat32).unsqueeze(1);
-			//取出所有预测不等0 的结果的行号
+			//取出所有该类别的结果的行号
 			auto class_mask_index = torch::nonzero(cls_mask.select(1, 5)).squeeze();
 			//取出所有符合结果的行
 			auto image_pred_class = image_prediction_data.index_select(0, class_mask_index).view({ -1, 7 });
-			// ascend by confidence 升序排序
+			// ascend by confidence 升序排序 分值高的在下低的在上
 			// seems that inverse method not work
+			//（1）将所有框的得分排序，选中最高分及其对应的框：
+
 			std::tuple<torch::Tensor, torch::Tensor> sort_ret = torch::sort(image_pred_class.select(1, 4));
 			//取出排序的行ID
 			auto conf_sort_index = std::get<1>(sort_ret);
@@ -670,27 +673,28 @@ torch::Tensor Darknet::write_results(torch::Tensor prediction, int num_classes, 
 			// conf_sort_index = conf_sort_index.inverse();
 
 			image_pred_class = image_pred_class.index_select(0, conf_sort_index.squeeze()).cpu();
-
-			for (int w = 0; w < image_pred_class.size(0) - 1; w++)
+			//（2）遍历其余的框，如果和当前最高分框的重叠面积(IOU)大于一定阈值，我们就将框删除。
+			//（3）从未处理的框中继续选一个得分最高的，重复上述过程。
+			for (int w = 0; w < image_pred_class.size(0);++w)
 			{
-				int mi = image_pred_class.size(0) - 1 - w;
 
-				if (mi <= 0)
+				int mi = image_pred_class.size(0) - 1 - w;//逆序计算iou 即从最大分数开始计算
+
+				if (mi<=0)
 				{
 					break;
 				}
-
+				//计算Iou 
 				auto ious = get_bbox_iou(image_pred_class[mi].unsqueeze(0), image_pred_class.slice(0, 0, mi));
-				//根据IOU筛选
-				auto iou_mask = (ious < nms_conf).to(torch::kFloat32).unsqueeze(1);
+				//过滤掉小于阈值的IOUs
+				auto iou_mask = (ious<nms_conf).to(torch::kFloat32).unsqueeze();
+				
+				image_pred_class.slice(0, 0, mi) = image_pred_class.slice(0, 0, mi)*iou_mask;
 
-				image_pred_class.slice(0, 0, mi) = image_pred_class.slice(0, 0, mi) * iou_mask;
-
-				// remove from list
-				auto non_zero_index = torch::nonzero(image_pred_class.select(1, 4)).squeeze();
+				auto non_zero_index = torch::nonzero(image_pred_class.select((1, 4)).squeeze();
+				//选出该类别中符合的区域
 				image_pred_class = image_pred_class.index_select(0, non_zero_index).view({ -1, 7 });
 			}
-
 			torch::Tensor batch_index = torch::ones({ image_pred_class.size(0), 1 }).fill_(i);
 
 			if (!write)
@@ -705,10 +709,7 @@ torch::Tensor Darknet::write_results(torch::Tensor prediction, int num_classes, 
 			}
 
 			num += 1;
+			
 		}
 	}
-
-
-	
-
 }
