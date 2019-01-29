@@ -33,24 +33,87 @@ struct Net : torch::nn::Module {
 
 
 
-int main(int argc, char* argv[]) {
+int main0(int argc, char* argv[]) {
 
 	torch::Tensor in = torch::randn({ 8, });
 
 	std::cout << "in : \n" << in << std::endl;
 	std::cout << in.sizes() << std::endl;
 
-	torch::Tensor tensor = torch::randint(/*low=*/-1, /*high=*/3, { 10, 5 });
-	std::cout << tensor << std::endl;
-	std::cout << " tensor.options() " << std::endl;
+	//torch::Tensor tensor = torch::randint(/*low=*/-1, /*high=*/3, { 10, 5 });
+	//std::cout << tensor << std::endl;
 
-	std::cout << tensor.options() << std::endl;
-	auto index_s = tensor.slice(1, 2).squeeze();
+	/*
+	//ensor.select(1, 0).sigmoid_() 修改原tensor 的值
+	tensor.select(1, 0).sigmoid_();
+	std::cout << tensor << std::endl;
+	*/
+
+	/*
+		std::cout << " tensor.options() " << std::endl;
+
+		std::cout << tensor.options() << std::endl;*/
+
+	//auto index_s = tensor.slice(1, 2).add(10);
+	//tensor.slice(1, 2) = index_s;
+	//std::cout << index_s << std::endl;
+	//std::cout << tensor << std::endl;
+
+	/*index_s = tensor.select(1, 2).add(100);
+	tensor.select(1, 2) = index_s;
+	std::cout << index_s << std::endl;
+	std::cout << tensor << std::endl;
+	*/
+
+	/*Max 选择出来两个结果 一个id 一个值
 	std::tuple<torch::Tensor,torch::Tensor> indxs = torch::max(index_s, 1);
 	std::cout <<std::get<0>(indxs) << std::endl;
-	std::cout << std::get<1>(indxs) << std::endl;
+	std::cout << std::get<1>(indxs) << std::endl;*/
 
-	std::cout << index_s << std::endl;
+
+	
+	//anchor_w.repeat({3,2}) 3 行重复次数，2 列重复次数
+	float data_in[8] = { 0.1478f,  1.4070f,  2.5251f, -1.9708f, 1.7050f, -0.1391f};
+
+	torch::TensorOptions options(at::ScalarType::Float);
+
+	std::vector<int64_t> dims = { 3, 2 };
+
+	/* upsample 上取样 输入tensor 的size（nbatch,channel,hegiht,width ） 输入IntList{out_height,out_width}
+	torch::Tensor data_tensor = torch::from_blob(data_in, at::IntList(dims), options).unsqueeze(0).unsqueeze(0);
+	std::cout << data_tensor.sizes() << std::endl;
+
+	auto aa= torch::upsample_bilinear2d(data_tensor, { 6,4 },true);
+	std::cout << aa << std::endl;
+	*/
+	torch::Tensor data_tensor = torch::from_blob(data_in, at::IntList(dims), options);
+	
+	//torch::upsample_nearest2d
+	std::cout << data_tensor << std::endl;
+	torch::Tensor anchor_w = data_tensor.slice(1, 0, 1);
+	torch::Tensor anchor_h = data_tensor.slice(1, 1, 2);
+	auto ss = data_tensor.slice(1, 0, 1)*anchor_w;
+	std::cout << anchor_h << std::endl;
+
+	std::cout << anchor_w << std::endl;
+
+	anchor_w = anchor_w.repeat({3,1});
+	anchor_h = anchor_h.repeat({ 3,1 });
+
+	auto a= anchor_h*anchor_w;
+
+	std::cout << anchor_h << std::endl;
+	std::cout << anchor_w << std::endl;
+	std::cout << a << std::endl;
+
+
+	/*	anchor_w = torch.Tensor(self.anchors).view(nA, self.anchor_step).index_select(1, torch.LongTensor([0])).cuda()
+		anchor_h = torch.Tensor(self.anchors).view(nA, self.anchor_step).index_select(1, torch.LongTensor([1])).cuda()
+		anchor_w = anchor_w.repeat(nB, 1).repeat(1, 1, nH*nW).view(nB*nA*nH*nW)
+		anchor_h = anchor_h.repeat(nB, 1).repeat(1, 1, nH*nW).view(nB*nA*nH*nW)*/
+
+
+
 	//auto index_s = torch::nonzero(tensor.select(1, 2));
 	//std::cout << tensor.index_select(0,index_s.squeeze()) << std::endl;
 
@@ -70,7 +133,8 @@ int main(int argc, char* argv[]) {
 
 	std::cout << tensor.options() << std::endl;
 	auto index_s = tensor.slice(1, 2).squeeze();
-	std::vector<torch::Tensor> indxs = torch::max(index_s, 1);
+	std::cout << index_s <<std::endl;
+	std::tuple<torch::Tensor,torch::Tensor> indxs = torch::max(index_s, 1);
 	std::cout << indxs[0] << std::endl;
 	std::cout << indxs[1] << std::endl;
 

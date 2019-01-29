@@ -93,6 +93,7 @@ static inline torch::Tensor get_bbox_iou(torch::Tensor box1, torch::Tensor box2)
 	return iou;
 
 }
+
 int Darknet::get_int_from_cfg(map<string, string> block, string key, int default_value){
 	if (block.find(key)!=block.end())
 	{
@@ -100,6 +101,7 @@ int Darknet::get_int_from_cfg(map<string, string> block, string key, int default
 	}
 	return default_value;
 }
+
 string Darknet::get_string_from_cfg(map<string, string> block, string key, string default_value)
 {
 	if (block.find(key)!=block.end())
@@ -147,12 +149,12 @@ struct UpsampleLayer:torch::nn::Module
 		{
 			w = sizes[2] * _stride;
 			h = sizes[3] * _stride;
-			x = torch::upsample_nearest1d(x, { w, h });
+			x = torch::upsample_nearest2d(x, { w, h });
 		}
 		else if (sizes.size()==3)
 		{
 			w = sizes[2] * _stride;
-			x = torch::upsample_nearest1d(x, { w });
+			x = torch::upsample_nearest2d(x, { w });
 		}
 		return x;
 	}
@@ -198,19 +200,22 @@ struct DetectionLayer:torch::nn::Module
 		Object 分数表示目标在边界框内的概率。红色网格和相邻网格的 Object 分数应该接近 1，而角落处的网格的 Object 分数可能接近 0。
 		objectness 分数的计算也使用 sigmoid 函数，因此它可以被理解为概率。
 		*/
+
 		result.select(2, 0).sigmoid_();//中心 tx 偏移量
 		result.select(2, 1).sigmoid_();//中心 ty 偏移量
 		result.select(2,4).sigmoid_();//目标分数 
 
+		std::cout << result.sizes() << std::endl;
 
 		auto grid_len = torch::arange(grid_size);
 
 		vector<torch::Tensor> args = torch::meshgrid({ grid_len,grid_len });
+
 		torch::Tensor x_offset = args[1].contiguous().view({ -1, 1 });//变成一列向量
 		torch::Tensor y_offset = args[0].contiguous().view({ -1, 1 });
 
-		cout << "x_offset" << x_offset << endl;
-		cout << "y_offset" << y_offset << endl;
+		//cout << "x_offset" << x_offset << endl;
+		//cout << "y_offset" << y_offset << endl;
 
 		x_offset = x_offset.to(device);
 		y_offset = y_offset.to(device);
@@ -222,8 +227,27 @@ struct DetectionLayer:torch::nn::Module
 
 		result.slice(2, 0, 2).add_(x_y_offset);//slice 选择第2+1 纬 的0 1 列数据即 中心的偏移量
 		torch::Tensor anchors_tensor = torch::from_blob(anchors.data(), { num_anchors, 2 });
+		
+		torch::Tensor anchors_w = anchors_tensor.slice(1, 0,1);
+		torch::Tensor anchors_h = anchors_tensor.slice(1, 1, 2);
+	
+		anchors_h = anchors_h.repeat({ grid_size*grid_size,1 });
+		anchors_w = anchors_w.repeat({ grid_size*grid_size,1 });
 
-		result.slice(2, 2, 4).exp_().mul_(anchors_tensor); //选择anchor的宽高
+		anchors_h = anchors_h.to(device);
+		anchors_w = anchors_w.to(device);
+
+		std::cout << anchors_w.sizes() << std::endl;
+		std::cout << result.slice(2, 2,3).squeeze(0).sizes() << std::endl;
+
+		result.slice(2, 2, 3).exp_();
+
+		anchors_w = result.slice(2, 2,3).squeeze(0)*anchors_w; //选择anchor的宽高
+		result.slice(2, 2, 3) = anchors_w;
+
+		result.slice(2, 3, 4).exp_();
+		anchors_h=result.slice(2, 3,4).squeeze(0)*anchors_h; //选择anchor的宽高
+		result.slice(2, 3, 4) = anchors_h;
 
 		/*类别置信度
 		类别置信度表示检测到的对象属于某个类别的概率（如狗、猫、香蕉、汽车等）。在 v3 之前，YOLO
@@ -243,32 +267,42 @@ struct DetectionLayer:torch::nn::Module
 
 //Darknet
 Darknet::Darknet(const char *conf_file, torch::Device *device){
+	
 	load_cfg(conf_file);
 	_device = device;
 	create_modules();
 }
 
-void Darknet::load_cfg(const char *cfg_file){
+
+void Darknet::load_cfg(const char *cfg_file) {
 	fstream fs(cfg_file);
 	if (!fs)
 	{
 		std::cout << " Fail to load cfg file:" << cfg_file << std::endl;
+
 		return;
 	}
 	string line;
-	while (getline(fs,line))
+	int  k = 0;
+	while (getline(fs, line))
 	{
 		trim(line);
 		if (line.empty())
 		{
 			continue;
 		}
-		if (line.substr(0,1)=="[")
+		if (line.substr(0, 1) == "[")
 		{
+			k++;
 			map<string, string> block;
 			string key = line.substr(1, line.length() - 2);
 			block["type"] = key;
 			blocks.push_back(block);
+
+#ifdef WITH_LOG
+			std::cout << " layer_type :" << key << " id:" << k << std::endl;
+#endif
+
 		}
 		else if (line.substr(0, 1) == "#")
 			continue;
@@ -277,7 +311,7 @@ void Darknet::load_cfg(const char *cfg_file){
 			map<string, string> *block = &blocks[blocks.size() - 1];
 			vector<string> op_info;
 			split(line, op_info, "=");
-			if (op_info.size()==2)
+			if (op_info.size() == 2)
 			{
 				string p_key = op_info[0];
 				string p_value = op_info[1];
@@ -288,37 +322,52 @@ void Darknet::load_cfg(const char *cfg_file){
 	fs.close();
 }
 
+
 void Darknet::create_modules(){
 	int prev_filters = 3;//输入channel
+
 	std::vector<int> output_filters;
+
 	int index = 0;
+
 	int filters = 0;//conv channel 该层输出channel;
+
 	for (int i = 0, len = blocks.size(); i < len;i++)
 	{
 		map<string, string> block=blocks[i];
-		torch::nn::Sequential module;
+
 		string layer_type = block["type"];
+
+		// std::cout << index << "--" << layer_type << endl;
+
+		torch::nn::Sequential module;
+
+
 		if (layer_type == "net")
 			continue;
+
 		if (layer_type=="convolutional")
 		{
 			string activation = get_string_from_cfg(block, "activation", "");
 			int batch_normalize = get_int_from_cfg(block, "batch_normalize", 0);
 			filters = get_int_from_cfg(block, "filters", 0);
 			int padding = get_int_from_cfg(block, "pad", 0);
-			int stride = get_int_from_cfg(block, "stride", 0);
+			int stride = get_int_from_cfg(block, "stride", 1);
 			int kernel_size = get_int_from_cfg(block, "size", 0);
 
 			int pad = padding > 0 ? (kernel_size - 1) / 2 : 0;
-			bool with_bias = batch_normalize > 0 ? true : false;
-			torch::nn::Conv2d conv =
-				torch::nn::Conv2d(conv_options(prev_filters, filters, kernel_size, stride, pad, 1, with_bias));
+			bool with_bias = batch_normalize > 0 ? false : true;
+
+			torch::nn::Conv2d conv =torch::nn::Conv2d(conv_options(prev_filters, filters, kernel_size, stride, pad, 1, with_bias));
 			module->push_back(conv);
+
+
 			if (batch_normalize>0)
 			{
 				torch::nn::BatchNorm bn = torch::nn::BatchNorm(bn_options(filters));
 				module->push_back(bn);
 			}
+
 			if (activation=="leaky")
 			{
 				module->push_back(torch::nn::Functional(torch::leaky_relu,/*slope=*/0.1));
@@ -327,6 +376,7 @@ void Darknet::create_modules(){
 		else if (layer_type=="upsample")
 		{
 			int stride = get_int_from_cfg(block, "stride", 1);
+
 			UpsampleLayer uplayer(stride);
 			module->push_back(uplayer);
 		}
@@ -335,6 +385,7 @@ void Darknet::create_modules(){
 			//skip connnection
 			int from = get_int_from_cfg(block, "from", 1);
 			block["from"] = std::to_string(from);
+
 			blocks[i] = block;
 
 			//placeholder
@@ -350,17 +401,20 @@ void Darknet::create_modules(){
 			split(layers_info, layers, ",");
 
 			std::string::size_type sz;
-			signed int start = std::stoi(layers[0]);
+			signed int start = std::stoi(layers[0],&sz);
 			signed int end = 0;
+
 			if (layers.size() >1)
 			{
-				end = std::stoi(layers[1]);
+				end = std::stoi(layers[1],&sz);
 			}
-			if (end>0)end = end - index;
+
 			if (start > 0) start = start - index;
-			
-			block["start"] = start;
-			block["end"] = end;
+			if (end > 0)end = end - index;
+
+
+			block["start"] = std::to_string(start);
+			block["end"] = std::to_string(end);
 
 			blocks[i] = block;
 
@@ -402,15 +456,25 @@ void Darknet::create_modules(){
 			cout << "unsupported operator:" << layer_type << endl;
 		}
 
+#ifdef WITH_LOG
+		std::cout << " layer_type :" << layer_type << " id:" << i << std::endl;
+#endif
+
 		prev_filters = filters;
 		output_filters.push_back(filters);
 		module_list.push_back(module);
+
 		char *module_key = new char[strlen("layer_") + sizeof(index) + 1];
+
 		sprintf(module_key, "%s%d", "layer_", index);
+
 		register_module(module_key, module);
+
 		index += 1;
 	}
 }
+
+
 
 map<string, string> * Darknet::get_net_info() {
 	if (blocks.size()>0)
@@ -418,10 +482,15 @@ map<string, string> * Darknet::get_net_info() {
 		return &blocks[0];
 	}
 }
+
 void Darknet::load_weights(const char *weight_file){
 	
 	ifstream fs(weight_file,ios::binary);
-
+	if (!fs)
+	{
+		std::cout << " Fail to load weihght file:" << weight_file << std::endl;
+		return;
+	}
 	//header info :5*int32_t
 	int32_t header_size = sizeof(int32_t)*5;
 
@@ -433,6 +502,7 @@ void Darknet::load_weights(const char *weight_file){
 
 	//skip header
 	lenght = lenght - header_size;
+
 	fs.seekg(header_size, fs.beg);
 
 	float*weight_src = (float*)malloc(lenght);
@@ -440,10 +510,15 @@ void Darknet::load_weights(const char *weight_file){
 	fs.read(reinterpret_cast<char*>(weight_src), lenght);
 
 	fs.close();
+#ifdef WITH_LOG
+
+	std::cout << "weight lenght :" << lenght << endl;
+#endif
+
 	at::TensorOptions options = torch::TensorOptions().dtype(torch::kFloat32).is_variable(true);
 	at::Tensor weight = torch::CPU(torch::kFloat32).tensorFromBlob(weight_src, { lenght / 4 });
-
-
+	std::cout << weight.sizes() << std::endl;
+	int layer_count = 0;
 	for (int i = 0; i < module_list.size();i++)
 	{
 		map<string, string> module_info = blocks[i + 1];
@@ -472,13 +547,13 @@ void Darknet::load_weights(const char *weight_file){
 			// s=（x-m）除以(方差+s）x=w*s +b;
 			at::Tensor bn_bias = weight.slice(0, index_weight, num_bn_biases + index_weight);
 			index_weight += num_bn_biases;
-			
+
 			at::Tensor bn_weights = weight.slice(0, index_weight, index_weight + num_bn_biases);
 			index_weight += num_bn_biases;
-			
+
 			at::Tensor bn_running_mean = weight.slice(0, index_weight, index_weight + num_bn_biases);
 			index_weight += num_bn_biases;
-			
+
 			at::Tensor bn_running_var = weight.slice(0, index_weight, index_weight + num_bn_biases);
 			index_weight += num_bn_biases;
 
@@ -492,26 +567,37 @@ void Darknet::load_weights(const char *weight_file){
 			bn_imp->running_mean.set_data(bn_running_mean);
 			bn_imp->running_variance.set_data(bn_running_var);
 		}
-		else
+		else 
 		{
 			int num_conv_biase = conv_imp->bias.numel();
-			at::Tensor conv_bias = weight.slice(0, index_weight, index_weight + num_conv_biase);
-			index_weight += num_conv_biase;
-			conv_bias = conv_bias.view_as(conv_imp->bias);
-			conv_imp->bias.set_data(conv_bias);
+			if (num_conv_biase!=0)
+			{
+				at::Tensor conv_bias = weight.slice(0, index_weight, index_weight + num_conv_biase);
+				index_weight += num_conv_biase;
+				conv_bias = conv_bias.view_as(conv_imp->bias);
+				conv_imp->bias.set_data(conv_bias);
+			}
 		}
-
 		int num_weight = conv_imp->weight.numel();
 		at::Tensor conv_weight = weight.slice(0, index_weight, index_weight + num_weight);
 		index_weight += num_weight;
 
 		conv_weight = conv_weight.view_as(conv_imp->weight);
 		conv_imp->weight.set_data(conv_weight);
+#ifdef WITH_LOG
+
+		std::cout << "index_weight_" << i << "  =" << index_weight << " count :" << index_weight-layer_count<< endl;
+#endif
+		layer_count = index_weight;
 	}
+#ifdef WITH_LOG
+
+	std::cout << "loading weight over =" <<"  index_weight=" << index_weight << endl;
+#endif
+
 }
 
 torch::Tensor Darknet::forward(torch::Tensor x){
-
 	int module_count = module_list.size();
 	std::vector<torch::Tensor> outputs(module_count);
 
@@ -523,7 +609,9 @@ torch::Tensor Darknet::forward(torch::Tensor x){
 		map<string, string> block = blocks[i + 1];
 
 		string layer_type = block["type"];
-
+#ifdef WITH_LOG
+		std::cout << "forward type:" << layer_type << "Id ：" << i << std::endl;
+#endif // WITH_LOG
 		if (layer_type == "net")
 			continue;
 		if (layer_type == "convolutional" || layer_type == "upsample"){
@@ -567,7 +655,7 @@ torch::Tensor Darknet::forward(torch::Tensor x){
 			map<string, string> net_info = blocks[0];
 
 			int inp_dim = std::stoi(net_info["height"],0);
-			int num_classes = std::stoi(net_info["classes"],0);
+			int num_classes = std::stoi(block["classes"],0);
 
 			x = seq_imp->forward(x, inp_dim, num_classes, *_device);
 
@@ -586,15 +674,115 @@ torch::Tensor Darknet::forward(torch::Tensor x){
 	return result;
 }
 
-torch::Tensor Darknet::write_results(torch::Tensor prediction, int num_classes, float confidence, float nms_conf /* = 0.4 */)
+//
+//void Darknet::load_weights(const char *weight_file)
+//{
+//	ifstream fs(weight_file, ios::binary);
+//
+//	// header info: 5 * int32_t
+//	int32_t header_size = sizeof(int32_t) * 5;
+//
+//	int64_t index_weight = 0;
+//
+//	fs.seekg(0, fs.end);
+//	int64_t length = fs.tellg();
+//	// skip header
+//	length = length - header_size;
+//
+//	fs.seekg(header_size, fs.beg);
+//	float *weights_src = (float *)malloc(length);
+//	fs.read(reinterpret_cast<char*>(weights_src), length);
+//
+//	fs.close();
+//
+//	at::TensorOptions options = torch::TensorOptions()
+//		.dtype(torch::kFloat32)
+//		.is_variable(true);
+//	at::Tensor weights = torch::CPU(torch::kFloat32).tensorFromBlob(weights_src, { length / 4 });
+//
+//	for (int i = 0; i < module_list.size(); i++)
+//	{
+//		map<string, string> module_info = blocks[i + 1];
+//
+//		string module_type = module_info["type"];
+//
+//		// only conv layer need to load weight
+//		if (module_type != "convolutional")	continue;
+//
+//		torch::nn::Sequential seq_module = module_list[i];
+//
+//		auto conv_module = seq_module.ptr()->ptr(0);
+//		torch::nn::Conv2dImpl *conv_imp = dynamic_cast<torch::nn::Conv2dImpl *>(conv_module.get());
+//
+//		int batch_normalize = get_int_from_cfg(module_info, "batch_normalize", 0);
+//
+//		if (batch_normalize > 0)
+//		{
+//			// second module
+//			auto bn_module = seq_module.ptr()->ptr(1);
+//
+//			torch::nn::BatchNormImpl *bn_imp = dynamic_cast<torch::nn::BatchNormImpl *>(bn_module.get());
+//
+//			int num_bn_biases = bn_imp->bias.numel();
+//
+//			at::Tensor bn_bias = weights.slice(0, index_weight, index_weight + num_bn_biases);
+//			index_weight += num_bn_biases;
+//
+//			at::Tensor bn_weights = weights.slice(0, index_weight, index_weight + num_bn_biases);
+//			index_weight += num_bn_biases;
+//
+//			at::Tensor bn_running_mean = weights.slice(0, index_weight, index_weight + num_bn_biases);
+//			index_weight += num_bn_biases;
+//
+//			at::Tensor bn_running_var = weights.slice(0, index_weight, index_weight + num_bn_biases);
+//			index_weight += num_bn_biases;
+//
+//			bn_bias = bn_bias.view_as(bn_imp->bias);
+//			bn_weights = bn_weights.view_as(bn_imp->weight);
+//			bn_running_mean = bn_running_mean.view_as(bn_imp->running_mean);
+//			bn_running_var = bn_running_var.view_as(bn_imp->running_variance);
+//
+//			bn_imp->bias.set_data(bn_bias);
+//			bn_imp->weight.set_data(bn_weights);
+//			bn_imp->running_mean.set_data(bn_running_mean);
+//			bn_imp->running_variance.set_data(bn_running_var);
+//		}
+//		else
+//		{
+//			int num_conv_biases = conv_imp->bias.numel();
+//
+//			at::Tensor conv_bias = weights.slice(0, index_weight, index_weight + num_conv_biases);
+//			index_weight += num_conv_biases;
+//
+//			conv_bias = conv_bias.view_as(conv_imp->bias);
+//			conv_imp->bias.set_data(conv_bias);
+//		}
+//
+//		int num_weights = conv_imp->weight.numel();
+//
+//		at::Tensor conv_weights = weights.slice(0, index_weight, index_weight + num_weights);
+//		index_weight += num_weights;
+//
+//		conv_weights = conv_weights.view_as(conv_imp->weight);
+//		conv_imp->weight.set_data(conv_weights);
+//	}
+//}
+//
+
+torch::Tensor  Darknet::write_results(torch::Tensor prediction, int num_classes, float confidence, float nms_conf /* = 0.4 */)
 {
+	std::cout << prediction.sizes() << std::endl;
+
+	//筛选出是目标的结果 分数大于目标愤俗阈值的选择出来，prediction.sizes() [1, 10647, 85]
 	auto conf_maak = (prediction.select(2, 4) > confidence).to(torch::kFloat32).unsqueeze(2);
 
-	prediction.mul_(conf_maak);
-
+	//conf_mask.sizes() [1, 10647, 1] 符合条件的数据为 1 不符合的为 0 
+	prediction.mul_(conf_maak);//相乘后 不符合的 与选框的数据全为0 符合的数据不变，
+	
+	//筛选出所有符合条件的与选框 
 	auto ind_nz = torch::nonzero(prediction.select(2, 4)).transpose(0, 1).contiguous();
 
-	if (ind_nz.size(0)==0)
+	if (ind_nz.size(0) == 0)
 	{
 		return torch::zeros({ 0 });
 	}
@@ -615,43 +803,49 @@ torch::Tensor Darknet::write_results(torch::Tensor prediction, int num_classes, 
 
 	bool write = false;
 	int num = 0;
-	for (int i=0;i<batch_size;++i)
+	for (int i = 0; i < batch_size; ++i)
 	{
 		auto image_prediction = prediction[i];
 		// get the max classes score at each result max_classes[0] max and max_classes[1] index 0是行1 是列
 		std::tuple<torch::Tensor, torch::Tensor> max_classes = torch::max(image_prediction.slice(1, item_attr_size, item_attr_size + num_classes), 1);
+
 		//score
 		auto max_conf = std::get<0>(max_classes);
 		//index 行id 
-
 		auto max_conf_score = std::get<1>(max_classes);
+
+
 		max_conf = max_conf.to(torch::kFloat32).unsqueeze(1);
 		max_conf_score = max_conf_score.to(torch::kFloat32).unsqueeze(1);
+
+		//组成新的矩阵 矩阵大小（nx7）的矩阵 
 		// shape: n * 7, left x, left y, right x, right y, object confidence, class_score, class_id
 		image_prediction = torch::cat({ image_prediction.slice(1, 0, 5), max_conf, max_conf_score }, 1);
 
 		//remove item which object confidence=0 返回不等于0的行id
 		auto non_zero_index = torch::nonzero(image_prediction.select(1, 4));
-		//根据行id 选出 生成的种类
+
+		//根据行id 选出 生成的不等于零的种类 
 		auto image_prediction_data = image_prediction.index_select(0, non_zero_index.squeeze()).view({ -1, 7 });
 
 		//get unique classes
 		std::vector<torch::Tensor> img_classes;//classesID
-		for (int m=0,len=image_prediction.size(0);m<len;++m)
+		//筛选出每个类别的预选框保存到同一个tensor 中；
+		for (int m = 0, len = image_prediction.size(0); m < len; ++m)
 		{
 			bool found = false;
-			for (int n=0;n<img_classes.size();n++)
+			for (int n = 0; n < img_classes.size(); n++)
 			{
 				auto ret = (image_prediction[m][6] == img_classes[n]);
-				if (torch::nonzero(ret).size(0)>0)
+				if (torch::nonzero(ret).size(0) > 0)
 				{
 					found = true;
 					break;
 				}
 			}
-			if (!found) img_classes.push_back(image_prediction[m][6]);
+			if (!found) img_classes.push_back(image_prediction[m][6]);//保存cls_id
 		}
-
+		std::cout << "img_classes " << img_classes.size() << std::endl;
 		for (int k = 0; k < img_classes.size(); k++)
 		{
 			auto cls = img_classes[k]; //取出一类进行比较
@@ -671,29 +865,35 @@ torch::Tensor Darknet::write_results(torch::Tensor prediction, int num_classes, 
 
 			// seems that there is something wrong with inverse method
 			// conf_sort_index = conf_sort_index.inverse();
-
 			image_pred_class = image_pred_class.index_select(0, conf_sort_index.squeeze()).cpu();
+
 			//（2）遍历其余的框，如果和当前最高分框的重叠面积(IOU)大于一定阈值，我们就将框删除。
 			//（3）从未处理的框中继续选一个得分最高的，重复上述过程。
-			for (int w = 0; w < image_pred_class.size(0);++w)
-			{
 
+			//遍历该分类的所有数据
+			for (int w = 0; w < image_pred_class.size(0); ++w)
+			{
 				int mi = image_pred_class.size(0) - 1 - w;//逆序计算iou 即从最大分数开始计算
 
-				if (mi<=0)
+				if (mi <= 0)
 				{
 					break;
 				}
+
 				//计算Iou 
 				auto ious = get_bbox_iou(image_pred_class[mi].unsqueeze(0), image_pred_class.slice(0, 0, mi));
-				//过滤掉小于阈值的IOUs
-				auto iou_mask = (ious<nms_conf).to(torch::kFloat32).unsqueeze(1);
-				
+				//过滤掉大于阈值的IOUs
+				auto iou_mask = (ious < nms_conf).to(torch::kFloat32).unsqueeze(1);
+
 				image_pred_class.slice(0, 0, mi) = image_pred_class.slice(0, 0, mi)*iou_mask;
 
 				at::Tensor non_zero_index = torch::nonzero(image_pred_class.select(1, 4));
-				//选出该类别中符合的区域
-				image_pred_class = image_pred_class.index_select(0, non_zero_index).view({ -1, 7 });
+
+				if (non_zero_index.size(0) > 0)
+				{
+					//选出该类别中符合的区域
+					image_pred_class = image_pred_class.index_select(0, non_zero_index.squeeze()).view({ -1,7 });
+				}
 			}
 			torch::Tensor batch_index = torch::ones({ image_pred_class.size(0), 1 }).fill_(i);
 
@@ -707,9 +907,147 @@ torch::Tensor Darknet::write_results(torch::Tensor prediction, int num_classes, 
 				auto out = torch::cat({ batch_index, image_pred_class }, 1);
 				output = torch::cat({ output, out }, 0);
 			}
-
 			num += 1;
-			
 		}
+		
 	}
+	if (num == 0)
+	{
+		return torch::zeros({ 0 });
+	}
+
+	return output;
 }
+
+//
+//torch::Tensor Darknet::write_results(torch::Tensor prediction, int num_classes, float confidence, float nms_conf)
+//{
+//	// get result which object confidence > threshold
+//	auto conf_mask = (prediction.select(2, 4) > confidence).to(torch::kFloat32).unsqueeze(2);
+//
+//	prediction.mul_(conf_mask);
+//	auto ind_nz = torch::nonzero(prediction.select(2, 4)).transpose(0, 1).contiguous();
+//
+//	if (ind_nz.size(0) == 0)
+//	{
+//		return torch::zeros({ 0 });
+//	}
+//
+//	torch::Tensor box_a = torch::ones(prediction.sizes(), prediction.options());
+//	// top left x = centerX - w/2
+//	box_a.select(2, 0) = prediction.select(2, 0) - prediction.select(2, 2).div(2);
+//	box_a.select(2, 1) = prediction.select(2, 1) - prediction.select(2, 3).div(2);
+//	box_a.select(2, 2) = prediction.select(2, 0) + prediction.select(2, 2).div(2);
+//	box_a.select(2, 3) = prediction.select(2, 1) + prediction.select(2, 3).div(2);
+//
+//	prediction.slice(2, 0, 4) = box_a.slice(2, 0, 4);
+//
+//	int batch_size = prediction.size(0);
+//	int item_attr_size = 5;
+//
+//	torch::Tensor output = torch::ones({ 1, prediction.size(2) + 1 });
+//	bool write = false;
+//
+//	int num = 0;
+//
+//	for (int i = 0; i < batch_size; i++)
+//	{
+//		auto image_prediction = prediction[i];
+//
+//		// get the max classes score at each result
+//		std::tuple<torch::Tensor, torch::Tensor> max_classes = torch::max(image_prediction.slice(1, item_attr_size, item_attr_size + num_classes), 1);
+//
+//		// class score
+//		auto max_conf = std::get<0>(max_classes);
+//		// index
+//		auto max_conf_score = std::get<1>(max_classes);
+//		max_conf = max_conf.to(torch::kFloat32).unsqueeze(1);
+//		max_conf_score = max_conf_score.to(torch::kFloat32).unsqueeze(1);
+//
+//		// shape: n * 7, left x, left y, right x, right y, object confidence, class_score, class_id
+//		image_prediction = torch::cat({ image_prediction.slice(1, 0, 5), max_conf, max_conf_score }, 1);
+//
+//		// remove item which object confidence == 0
+//		auto non_zero_index = torch::nonzero(image_prediction.select(1, 4));
+//		auto image_prediction_data = image_prediction.index_select(0, non_zero_index.squeeze()).view({ -1, 7 });
+//
+//		// get unique classes 
+//		std::vector<torch::Tensor> img_classes;
+//
+//		for (int m = 0, len = image_prediction_data.size(0); m < len; m++)
+//		{
+//			bool found = false;
+//			for (int n = 0; n < img_classes.size(); n++)
+//			{
+//				auto ret = (image_prediction_data[m][6] == img_classes[n]);
+//				if (torch::nonzero(ret).size(0) > 0)
+//				{
+//					found = true;
+//					break;
+//				}
+//			}
+//			if (!found) img_classes.push_back(image_prediction_data[m][6]);
+//		}
+//
+//		for (int k = 0; k < img_classes.size(); k++)
+//		{
+//			auto cls = img_classes[k];
+//
+//			auto cls_mask = image_prediction_data * (image_prediction_data.select(1, 6) == cls).to(torch::kFloat32).unsqueeze(1);
+//			auto class_mask_index = torch::nonzero(cls_mask.select(1, 5)).squeeze();
+//
+//			auto image_pred_class = image_prediction_data.index_select(0, class_mask_index).view({ -1,7 });
+//			// ascend by confidence
+//			// seems that inverse method not work
+//			std::tuple<torch::Tensor, torch::Tensor> sort_ret = torch::sort(image_pred_class.select(1, 4));
+//
+//			auto conf_sort_index = std::get<1>(sort_ret);
+//
+//			// seems that there is something wrong with inverse method
+//			// conf_sort_index = conf_sort_index.inverse();
+//
+//			image_pred_class = image_pred_class.index_select(0, conf_sort_index.squeeze()).cpu();
+//
+//			for (int w = 0; w < image_pred_class.size(0) - 1; w++)
+//			{
+//				int mi = image_pred_class.size(0) - 1 - w;
+//
+//				if (mi <= 0)
+//				{
+//					break;
+//				}
+//
+//				auto ious = get_bbox_iou(image_pred_class[mi].unsqueeze(0), image_pred_class.slice(0, 0, mi));
+//
+//				auto iou_mask = (ious < nms_conf).to(torch::kFloat32).unsqueeze(1);
+//				image_pred_class.slice(0, 0, mi) = image_pred_class.slice(0, 0, mi) * iou_mask;
+//
+//				// remove from list
+//				auto non_zero_index = torch::nonzero(image_pred_class.select(1, 4)).squeeze();
+//				image_pred_class = image_pred_class.index_select(0, non_zero_index).view({ -1,7 });
+//			}
+//
+//			torch::Tensor batch_index = torch::ones({ image_pred_class.size(0), 1 }).fill_(i);
+//
+//			if (!write)
+//			{
+//				output = torch::cat({ batch_index, image_pred_class }, 1);
+//				write = true;
+//			}
+//			else
+//			{
+//				auto out = torch::cat({ batch_index, image_pred_class }, 1);
+//				output = torch::cat({ output,out }, 0);
+//			}
+//
+//			num += 1;
+//		}
+//	}
+//
+//	if (num == 0)
+//	{
+//		return torch::zeros({ 0 });
+//	}
+//
+//	return output;
+//}

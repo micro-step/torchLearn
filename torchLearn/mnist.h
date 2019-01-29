@@ -3,7 +3,7 @@
 #include <iostream>
 #include <vector>
 
-struct options
+struct Options
 {
 	std::string data_root{ "../data/mnist" };
 	int32_t batch_size{ 64 };
@@ -20,7 +20,7 @@ struct options
 struct Normalize :public torch::data::transforms::TensorTransform<>
 {
 	Normalize(float mean, float stddev) :mean_(torch::tensor(mean)),
-		stddev_(torch::Tensor(stddev)){};
+		stddev_(torch::tensor(stddev)){};
 
 	torch::Tensor operator()(torch::Tensor input)
 	{
@@ -44,12 +44,12 @@ struct Net :torch::nn::Module
 		register_module("fc2", fc2);
 
 	}
-	torch::Tensor forward(torch::Tensor s){
+	torch::Tensor forward(torch::Tensor x){
 		x = torch::relu(torch::max_pool2d(conv1->forward(x),2));
 		x = torch::relu(
 			torch::max_pool2d(conv2_drop->forward(conv2->forward(x)),2));
 		x = x.view({ -1, 320 });
-		x = torch.relu(fc1->forward(x));
+		x = torch::relu(fc1->forward(x));
 		x = torch::dropout(x,  /*p=*/0.5, /*training=*/is_training());
 		x = fc2->forward(x);
 		return torch::log_softmax(x,  /*dim=*/1);

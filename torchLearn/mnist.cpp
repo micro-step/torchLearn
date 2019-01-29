@@ -1,7 +1,7 @@
 #include <cstddef>
 #include <iostream>
-#include <striing>
 #include <vector>
+#include "mnist.h"
 
 template <typename DataLoader>
 void train(
@@ -15,7 +15,7 @@ void train(
 {
 	model.train();
 	size_t batch_idx = 0;
-	for (auto& batch:data_loader)
+	for (auto& batch : data_loader)
 	{
 		auto data = batch.data.to(device), targets = batch.target.to(device);
 		optimizer.zero_grad();
@@ -25,31 +25,30 @@ void train(
 		loss.backward();
 		optimizer.step();
 
-		if (batch_idx++%optimizer.log_interval==0)
+		if (batch_idx++%options.log_interval == 0)
 		{
 			std::cout << "Train Epoch: " << epoch << "["
-				<< batch_idx*batch.DataLoader.size(0) << "/" << dataset_size
+				<< batch_idx * batch.data.size(0) << "/" << dataset_size
 				<< "]\t Loss: " << loss.template item <float>() << std::endl;
 		}
-
 	}
 }
 
 template<typename DataLoader>
-vodi test(
+void test(
 	Net& model,
 	torch::Device device,
 	DataLoader& data_loader,
-	size_t dataset_size){
+	size_t dataset_size) {
 	torch::NoGradGuard no_grad;
 	model.eval();
 	double test_loss = 0;
 	int32_t correct = 0;
-	for(const auto& batch : data_loader){
+	for (const auto& batch : data_loader) {
 		auto data = batch.data.to(device), target = batch.target.to(device);
-		auto output model.forward(data);
+		auto output = model.forward(data);
 
-		tost_loss += torch::nll_loss(
+		test_loss += torch::nll_loss(
 			output,
 			target,
 			{},
@@ -59,14 +58,14 @@ vodi test(
 		correct += pred.eq(target).sum().template item<int64_t>();
 	}
 	test_loss /= dataset_size;
-	std::cout << "Test set :Average loss: " << test_loss 
+	std::cout << "Test set :Average loss: " << test_loss
 		<< ",Accuracy£º" << correct << "/" << dataset_size << std::endl;
 }
-auto main(int argc, const char* argv[]){
+auto mainM(int argc, const char* argv[]) {
 	torch::manual_seed(0);
-	Option options;
+	Options options;
 	torch::DeviceType device_type;
-	if (torch::cuda::is_available()& != options.no_cuda)
+	if (torch::cuda::is_available() != options.no_cuda)
 	{
 		std::cout << "CUDA available! Training on GPU" << std::endl;
 		device_type = torch::kCUDA;
@@ -83,7 +82,7 @@ auto main(int argc, const char* argv[]){
 
 	auto train_dataset =
 		torch::data::datasets::MNIST(
-		options.data_root, torch::data::datasets::MNIST::Mode::kTrain)
+			options.data_root, torch::data::datasets::MNIST::Mode::kTrain)
 		.map(Normalize(0.1307, 0.3081))
 		.map(torch::data::transforms::Stack<>());
 	const auto dataset_size = train_dataset.size();
@@ -93,7 +92,7 @@ auto main(int argc, const char* argv[]){
 
 	auto test_loader = torch::data::make_data_loader(
 		torch::data::datasets::MNIST(
-		options.data_root, torch::data::datasets::MNIST::Mode::kTest)
+			options.data_root, torch::data::datasets::MNIST::Mode::kTest)
 		.map(Normalize(0.1307, 0.3081))
 		.map(torch::data::transforms::Stack<>()),
 		options.batch_size);

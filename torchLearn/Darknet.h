@@ -1,7 +1,7 @@
-#include <torch/torch.h>
 #include <string>
 #include <vector>
 #include <map>
+#include <torch/torch.h>
 
 using namespace std;
 struct Darknet :torch::nn::Module
