@@ -1,6 +1,6 @@
 #include "mnist.h"
 
-#include <torch/torch.h>
+#include <torch\torch.h>
 
 #include <cstddef>
 #include <iostream>
@@ -22,7 +22,7 @@ void train(
     {
         auto data=batch.data.to(device),targets=batch.target.to(device);
         optimizer.zero_grad();
-        auto output=modle.forward(data);
+        auto output= model.forward(data);
         auto loss=torch::nll_loss(output ,targets);
         loss.backward();
         optimizer.step();
@@ -46,7 +46,7 @@ void test(
     double test_loss=0;
     int32_t correct=0;
 
-    for(const auto& batch : dataloader)
+    for(const auto& batch : data_loader)
     {
         auto data=batch.data.to(device),targets=batch.target.to(device);
 
@@ -55,19 +55,18 @@ void test(
             output,
             targets,
             {},
-            Reduction::sum).template item<float>();
+            Reduction::Sum).template item<float>();
 
         auto pred=output.argmax(1);
         correct +=pred.eq(targets).sum().template item<int64_t>();
-        /* code */
     }
-    teat_loss /=dataset_size;
+    test_loss /=dataset_size;
     std::cout<< "Test set: Average loss: " <<test_loss
     <<", Accuracy :" <<correct <<"/" <<dataset_size<<std::endl;
 }
 
 
-auto main(int argc,const char* agrv[])->int{
+auto main1(int argc,const char* agrv[])->int{
 
     torch::manual_seed(0);
     Options options;
@@ -83,4 +82,32 @@ auto main(int argc,const char* agrv[])->int{
     torch::Device device(device_type);
     Net model;
 
+	model.to(device);
+
+	auto train_dataset =
+		torch::data::datasets::MNIST(options.data_root, torch::data::datasets::MNIST::Mode::kTrain)
+		.map(Normalize(0.1307, 0.3081))
+		.map(torch::data::transforms::Stack<>());
+	const auto dataset_size = train_dataset.size();
+
+	auto train_loader = torch::data::make_data_loader(
+		std::move(train_dataset), options.batch_size);
+
+	auto test_loader = torch::data::make_data_loader(
+		torch::data::datasets::MNIST(options.data_root, torch::data::datasets::MNIST::Mode::kTest)
+		.map(Normalize(0.1307, 0.3081))
+		.map(torch::data::transforms::Stack<>()),
+		options.batch_size);
+
+	torch::optim::SGD optimizer(
+		model.parameters(),
+		torch::optim::SGDOptions(options.lr).momentum(options.momentum));
+
+	for (size_t epoch =1;epoch<options.epochs;++epoch)
+	{
+		train(epoch, options, model, device, *train_loader, optimizer, dataset_size.value());
+		test(model, device, *test_loader, dataset_size.value());
+	}
+
+	return 0;
 }
