@@ -1,7 +1,7 @@
 ﻿##ignore this file##
 /x64/
 /.vs/
-/torchLearn/
+/torchLearn/x64/
 .classpath
 .project
 .settings
