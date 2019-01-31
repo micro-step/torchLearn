@@ -6,15 +6,15 @@
 #include <vector>
 
 struct Options{
-    std::string data_root{"../data/mnist"};
-    int32_t batch_size{64};
-    int32_t epochs{10};
+    std::string data_root{"E:/PyL/torchLearn/x64/Debug/mnist/raw"};
+    int32_t batch_size{256};
+    int32_t epochs{5};
     double lr{0.01};
     double momentum{0.5};
     bool no_cuda{false};
     int32_t seed{1};
     int32_t test_batch_size{1000};
-    int32_t log_interval{10};
+    int32_t log_interval{100};
 };
 
 struct Normalize: public torch::data::transforms::TensorTransform<> {

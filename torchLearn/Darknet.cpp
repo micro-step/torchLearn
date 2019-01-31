@@ -771,7 +771,7 @@ torch::Tensor Darknet::forward(torch::Tensor x){
 
 torch::Tensor  Darknet::write_results(torch::Tensor prediction, int num_classes, float confidence, float nms_conf /* = 0.4 */)
 {
-	std::cout << prediction.sizes() << std::endl;
+	//std::cout << prediction.sizes() << std::endl;
 
 	//筛选出是目标的结果 分数大于目标愤俗阈值的选择出来，prediction.sizes() [1, 10647, 85]
 	auto conf_maak = (prediction.select(2, 4) > confidence).to(torch::kFloat32).unsqueeze(2);
@@ -845,7 +845,7 @@ torch::Tensor  Darknet::write_results(torch::Tensor prediction, int num_classes,
 			}
 			if (!found) img_classes.push_back(image_prediction[m][6]);//保存cls_id
 		}
-		std::cout << "img_classes " << img_classes.size() << std::endl;
+		//std::cout << "img_classes " << img_classes.size() << std::endl;
 		for (int k = 0; k < img_classes.size(); k++)
 		{
 			auto cls = img_classes[k]; //取出一类进行比较

@@ -40,7 +40,9 @@ namespace NewRN {
 				register_module("downsample",downsample);
 			}
 		}
+		
 		torch::Tensor forward(torch::Tensor x){
+
 			torch::Tensor residual(x.clone());
 
 			x=conv1->forward(x);
@@ -56,6 +58,7 @@ namespace NewRN {
 			}
 			x+=residual;
 			x=torch::relu(x);
+			return x;
 		}
 	};
 	const int BasicBlock::expansion=1;
@@ -124,15 +127,16 @@ namespace NewRN {
 
 		int64_t inplanes=64;
 		TN::Conv2d conv1;
+		TN::BatchNorm bn;
 		TN::Sequential layer1;
-		TN::Sequential layer2:
+		TN::Sequential layer2;
 		TN::Sequential layer3;
 		TN::Sequential layer4;
 		TN::Linear fc;
 
 		ResNet(torch::IntList layers,int64_t num_classes=1000)
 		:conv1(conv_options(3,64,7,2,3)),
-		bn1(64),
+		bn(64),
 		layer1(_make_layer(64,layers[0])),
 		layer2(_make_layer(128,layers[1],2)),
 		layer3(_make_layer(256,layers[2],3)),
@@ -140,7 +144,7 @@ namespace NewRN {
 		fc(512*Block::expansion,num_classes)
 		{
 			register_module("conv1",conv1);
-			register_module("bn1",bn1);
+			register_module("bn",bn);
 			register_module("layer1",layer1);
 			register_module("layer2",layer2);
 			register_module("layer3",layer3);
@@ -149,20 +153,21 @@ namespace NewRN {
 
 			for(auto m : this->modules())
 			{
-				if(	m.value.name()=="torch::nn::Conv2dImpl"){
-					for(auto p:m.value.parameters()){
-						torch::nn::init::xavier_normal_(p.value);
+				if(	m->name()=="torch::nn::Conv2dImpl"){
+					for(auto p:m->named_parameters()){
+						torch::nn::init::xavier_normal_(p.value());
 					}
 				}
-				else if (m.value.name()=="torch::nn::BatchNormImpl") {
+				else if (m->name() =="torch::nn::BatchNormImpl") {
 					/* code */
-					for(auto p:m.value.parameters() ){
-						if (p.key=="weight") {
-							torch::nn::init::constant_(p.value,1);
+					for(auto p:m->named_parameters())
+					{
+						if (p.key() == "weight") {
+							torch::nn::init::constant_(p.value(),1);
 						}
-						else if (p.key=="bias")
+						else if (p.key() == "bias")
 						{
-							torch::nn::init::constant_(p.value,0);
+							torch::nn::init::constant_(p.value(),0);
 						}
 					}
 				}
@@ -170,7 +175,7 @@ namespace NewRN {
 		}
 	torch::Tensor forward(torch::Tensor x){
 		x=conv1->forward(x);
-		x=bn1->forward(x);
+		x=bn->forward(x);
 		x=torch::relu(x);
 		x=torch::max_pool2d(x,3,2,1);
 
@@ -180,7 +185,7 @@ namespace NewRN {
 		x=layer4->forward(x);
 
 		x=torch::avg_pool2d(x,7,1);
-		x=x.view(x.sizes()[0],-1)
+		x = x.view({ x.sizes()[0], -1 });
 		x=fc->forward(x);
 
 		return x;
@@ -189,10 +194,10 @@ namespace NewRN {
 		private:
 		TN::Sequential _make_layer(int64_t planes,int64_t blocks,int64_t stride=1){
 			TN::Sequential downsample;
-			if (stride!=1 or inplanes!+planes* Block::expension) {
+			if (stride!=1 or inplanes!=planes* Block::expansion) {
 				downsample=TN::Sequential(
-					TN::Conv2d(conv_options(inplanes,planes*Block::expension,1,stride),
-					TN::BatchNorm(planes*Block::expension));
+					TN::Conv2d(conv_options(inplanes,planes*Block::expansion,1,stride)),
+					TN::BatchNorm(planes*Block::expansion));
 			}
 			TN::Sequential layers;
 			layers->push_back(Block(inplanes,planes,stride,downsample));
@@ -200,7 +205,6 @@ namespace NewRN {
 			for(int64_t i = 0; i < blocks; i++)
 			{
 				layers->push_back(Block(inplanes,planes));
-				/* code */
 			}
 			return layers;
 		}
@@ -240,16 +244,7 @@ int main2(){
 	resnet.to(device);
 	t=resnet.forward(t);
 	std::cout <<t.sizes()<<std::endl;
+	return 0;
 }
-
-
-
-
-
-
-
-
-
-
 
 }

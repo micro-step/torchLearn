@@ -3,8 +3,10 @@
 #include <opencv2/opencv.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 #include "Darknet.h"
+
 using namespace torch;
-int main(int argc, const char* argv[])
+
+int mainOK(int argc, const char* argv[])
 {
 	/*unsigned long long t = 0;
 	for (int i = 0; i < 5; i++) {
@@ -63,13 +65,13 @@ int main(int argc, const char* argv[])
 
 	auto img_tensor = torch::CPU(torch::kFloat32).tensorFromBlob(img_float.data, { 1, input_image_size, input_image_size, 3 });
 	img_tensor = img_tensor.permute({ 0,3, 1, 2 });
-	std::cout << img_tensor.sizes() << std::endl;
+	//std::cout << img_tensor.sizes() << std::endl;
 
-	std::cout << "img_var.sizes" << img_tensor.sizes() << endl;
+	//std::cout << "img_var.sizes" << img_tensor.sizes() << endl;
 
 	at::Tensor img_var = torch::autograd::make_variable(img_tensor).to(device);
 
-	std::cout << "img_var.sizes" << img_var.sizes()<<endl;
+	//std::cout << "img_var.sizes" << img_var.sizes()<<endl;
 
 	at::Tensor output = net.forward(img_var);
 
@@ -80,7 +82,7 @@ int main(int argc, const char* argv[])
 	//confidence =0.6
 
 	auto result = net.write_results(output, 80, 0.7, 0.1);
-	std::cout << result << std::endl;
+	//std::cout << result << std::endl;
 
 	if (result.dim()==1)
 	{
@@ -99,7 +101,7 @@ int main(int argc, const char* argv[])
 		{
 			cv::rectangle(origin_image, cv::Point(result_data[i][1]* w_scale, result_data[i][2]* h_scale), cv::Point(result_data[i][3]* w_scale, result_data[i][4]* h_scale), cv::Scalar(0, 0, 255), 1, 1, 0);
 		}
-		std::cout << result << std::endl;
+		//std::cout << result << std::endl;
 		cv::imwrite("e:\out-det.jpg", origin_image);
 	}
 	std::cout << "Done" << endl;

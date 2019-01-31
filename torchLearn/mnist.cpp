@@ -66,7 +66,7 @@ void test(
 }
 
 
-auto main1(int argc,const char* agrv[])->int{
+auto main(int argc,const char* agrv[])->int{
 
     torch::manual_seed(0);
     Options options;
@@ -81,6 +81,9 @@ auto main1(int argc,const char* agrv[])->int{
     }
     torch::Device device(device_type);
     Net model;
+	torch::serialize::InputArchive ipA = torch::serialize::InputArchive();
+	ipA.load_from("sss");
+	model.load(ipA);
 
 	model.to(device);
 
@@ -108,6 +111,8 @@ auto main1(int argc,const char* agrv[])->int{
 		train(epoch, options, model, device, *train_loader, optimizer, dataset_size.value());
 		test(model, device, *test_loader, dataset_size.value());
 	}
-
+	torch::serialize::OutputArchive opA=torch::serialize::OutputArchive();
+	model.save( opA);
+	opA.save_to("sss");
 	return 0;
 }
