@@ -126,12 +126,17 @@
   <ItemGroup>
     <ClCompile Include="Darknet.cpp" />
     <ClCompile Include="mainY.cpp" />
+    <ClCompile Include="mnist.cpp" />
     <ClCompile Include="resnet.cpp" />
+    <ClCompile Include="ResNet_c.cpp" />
     <ClCompile Include="torch.cpp" />
+    <ClCompile Include="utils.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Darknet.h" />
     <ClInclude Include="gpu_nms.hpp" />
+    <ClInclude Include="mnist.h" />
+    <ClInclude Include="utils.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="nms_kernel.cu" />

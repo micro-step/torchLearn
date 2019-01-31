@@ -33,16 +33,29 @@
     <ClCompile Include="mainY.cpp">
       <Filter>Yolo</Filter>
     </ClCompile>
+    <ClCompile Include="ResNet_c.cpp">
+      <Filter>resnet</Filter>
+    </ClCompile>
+    <ClCompile Include="mnist.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Darknet.h">
       <Filter>Yolo</Filter>
+    </ClInclude>
+    <ClInclude Include="gpu_nms.hpp">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="mnist.h">
+      <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="yolov3.cfg">
       <Filter>Yolo</Filter>
     </None>
+    <None Include="nms_kernel.cu" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="源.txt" />

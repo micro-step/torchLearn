@@ -1,17 +1,15 @@
-﻿##ignore this file##
-/x64/
-/.vs/
-/torchLearn/x64/
-.classpath
+﻿.classpath
 .project
 .settings
-##*.props
- ##filter databfile、sln file##
-##*.mdb
-##*.ldb
-##*.sln
-##class file##
 *.com
 *.class
 *.dll
 *.exe
+*.log
+*.temp
+*.tlog
+*.obj
+/.vs/
+**/x64/
+Debug/
+**/Debug/
